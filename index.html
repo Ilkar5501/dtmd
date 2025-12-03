@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Don’t Mind CC – Scores & Ranks</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Chart.js datalabels plugin (for values on each point) -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 1.5rem;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+    h1, h2 {
+      margin-top: 0;
+    }
+    .card {
+      background: #020617;
+      border-radius: 0.75rem;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.8);
+      border: 1px solid #1f2937;
+    }
+    label {
+      font-size: 0.9rem;
+      margin-right: 0.5rem;
+    }
+    select {
+      padding: 0.3rem 0.5rem;
+      border-radius: 0.5rem;
+      border: 1px solid #4b5563;
+      background: #020617;
+      color: #e5e7eb;
+    }
+    canvas {
+      max-width: 100%;
+      height: 400px;
+    }
+    .legend-note {
+      font-size: 0.8rem;
+      color: #9ca3af;
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Don’t Mind CC – Scores & Percentile Ranks</h1>
+
+  <div class="card">
+    <h2>Member View: Score + Percentile (Dual Axis)</h2>
+    <p>Select a member to see their 5–6 week progression.</p>
+    <div style="margin-bottom: 0.75rem;">
+      <label for="memberSelect">Member:</label>
+      <select id="memberSelect"></select>
+    </div>
+    <canvas id="memberChart"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>Holistic View: All Members’ Percentiles</h2>
+    <p>Every member’s percentile line across weeks.</p>
+    <canvas id="allPercentilesChart"></canvas>
+    <div class="legend-note">
+      Note: With 100+ members this graph is intentionally dense. Hover to see
+      individual lines. Percentile scale is 0–100 (higher = better rank).
+    </div>
+  </div>
+
+  <script>
+    // ===== CONFIG: your published CSV URL =====
+    const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXmnfHSlfOQTZ8_h1Y3NE-IqfxB942GsWfb34sRmSaDV__tWi68cDen3sy1L0TOwJGU6pmb2B4S8ZD/pub?gid=1833833721&single=true&output=csv";
+
+    // Weeks you care about – must match your schema columns
+    const WEEKS = ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"];
+
+    // Global data structures
+    let members = [];    // array of member names
+    let memberData = {}; // { memberName: { scores: [...], percentiles: [...] } }
+
+    let memberChart = null;
+    let allPercentilesChart = null;
+
+    // ------- CSV parsing helpers (handles quoted commas) -------
+
+    function parseCsvLine(line) {
+      const result = [];
+      let current = "";
+      let inQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+
+        if (ch === '"') {
+          // toggle in/out of quotes, or handle escaped quotes
+          if (inQuotes && line[i + 1] === '"') {
+            // escaped quote ("")
+            current += '"';
+            i++; // skip next quote
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (ch === "," && !inQuotes) {
+          result.push(current);
+          current = "";
+        } else {
+          current += ch;
+        }
+      }
+      result.push(current);
+      return result;
+    }
+
+    function parseCsv(text) {
+      const lines = text.trim().split(/\r?\n/);
+      if (!lines.length) return { headers: [], rows: [] };
+
+      const headers = parseCsvLine(lines[0]).map(h => h.trim());
+      const rows = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const cells = parseCsvLine(line);
+        const row = {};
+        headers.forEach((h, idx) => {
+          row[h] = cells[idx] !== undefined ? cells[idx].trim() : "";
+        });
+        rows.push(row);
+      }
+
+      return { headers, rows };
+    }
+
+    function toNumber(value) {
+      if (value === undefined || value === null || value === "" || value === "#N/A") {
+        return null;
+      }
+      // Remove commas from numbers like "1,234,567"
+      const clean = value.replace(/,/g, "");
+      const n = Number(clean);
+      return isNaN(n) ? null : n;
+    }
+
+    // ------- Data loading -------
+    async function loadData() {
+      const res = await fetch(CSV_URL);
+      if (!res.ok) {
+        throw new Error("Network response was not ok");
+      }
+      const text = await res.text();
+      const { rows } = parseCsv(text);
+
+      rows.forEach(row => {
+        const memberName = row["Member"];
+        if (!memberName) return;
+
+        const scores = [];
+        const percentiles = [];
+
+        WEEKS.forEach(week => {
+          const scoreCol = `${week} Score`;
+          const percCol = `${week} Percentile`;
+
+          scores.push(toNumber(row[scoreCol]));
+          percentiles.push(toNumber(row[percCol]));
+        });
+
+        members.push(memberName);
+        memberData[memberName] = { scores, percentiles };
+      });
+
+      // Sort members alphabetically for the dropdown
+      members.sort((a, b) => a.localeCompare(b));
+
+      populateMemberSelect();
+      initCharts();
+    }
+
+    // ------- UI setup -------
+    function populateMemberSelect() {
+      const select = document.getElementById("memberSelect");
+      select.innerHTML = "";
+      members.forEach(name => {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        select.appendChild(opt);
+      });
+      select.addEventListener("change", () => {
+        updateMemberChart(select.value);
+      });
+    }
+
+    // ------- Chart initialization -------
+    function initCharts() {
+      const ctxMember = document.getElementById("memberChart").getContext("2d");
+      const ctxAll = document.getElementById("allPercentilesChart").getContext("2d");
+
+      const defaultMember = members[0];
+
+      // register datalabels plugin
+      Chart.register(ChartDataLabels);
+
+      // Member dual-axis chart (Score + Percentile)
+      memberChart = new Chart(ctxMember, {
+        type: "line",
+        data: {
+          labels: WEEKS,
+          datasets: [
+            {
+              label: "Score",
+              yAxisID: "yScore",
+              data: memberData[defaultMember].scores,
+              borderWidth: 2,
+              borderColor: "#fbbf24",
+              backgroundColor: "rgba(251,191,36,0.15)",
+              tension: 0.2,
+              pointRadius: 4
+            },
+            {
+              label: "Percentile",
+              yAxisID: "yPercentile",
+              data: memberData[defaultMember].percentiles,
+              borderWidth: 2,
+              borderColor: "#22d3ee",
+              backgroundColor: "rgba(34,211,238,0.15)",
+              borderDash: [6, 4],
+              tension: 0.2,
+              pointRadius: 4
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: "nearest", intersect: false },
+          plugins: {
+            legend: { labels: { color: "#e5e7eb" } },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const label = ctx.dataset.label || "";
+                  const v = ctx.parsed.y;
+                  if (label === "Score" && v != null) {
+                    return `${label}: ${v.toLocaleString()}`;
+                  }
+                  if (label === "Percentile" && v != null) {
+                    return `${label}: ${v}`;
+                  }
+                  return `${label}: ${v}`;
+                }
+              }
+            },
+            datalabels: {
+              color: "#e5e7eb",
+              anchor: "end",
+              align: "top",
+              font: { size: 10 },
+              formatter: (value, ctx) => {
+                if (value == null) return "";
+                if (ctx.dataset.label === "Score") {
+                  return value.toLocaleString();
+                } else {
+                  return `${value}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: "#9ca3af" },
+              grid: { color: "rgba(55,65,81,0.4)" }
+            },
+            yScore: {
+              type: "linear",
+              position: "left",
+              ticks: { color: "#fbbf24" }, // score axis
+              grid: { color: "rgba(31,41,55,0.5)" }
+            },
+            yPercentile: {
+              type: "linear",
+              position: "right",
+              min: 0,
+              max: 100,
+              ticks: { color: "#22d3ee" }, // percentile axis
+              grid: { drawOnChartArea: false }
+            }
+          }
+        }
+      });
+
+      // Holistic chart: all members' percentile lines
+      const percentileDatasets = members.map(name => {
+        return {
+          label: name,
+          data: memberData[name].percentiles,
+          borderWidth: 1,
+          borderColor: "rgba(148,163,184,0.6)",
+          backgroundColor: "rgba(148,163,184,0.15)",
+          pointRadius: 0,
+          tension: 0.15
+        };
+      });
+
+      allPercentilesChart = new Chart(ctxAll, {
+        type: "line",
+        data: {
+          labels: WEEKS,
+          datasets: percentileDatasets
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: "nearest", intersect: false },
+          plugins: {
+            legend: { display: false }, // 100+ names is too much
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const name = ctx.dataset.label || "";
+                  const v = ctx.parsed.y;
+                  return `${name}: ${v}`;
+                }
+              }
+            },
+            datalabels: { display: false }
+          },
+          scales: {
+            x: {
+              ticks: { color: "#9ca3af" },
+              grid: { color: "rgba(55,65,81,0.4)" }
+            },
+            y: {
+              min: 0,
+              max: 100,
+              ticks: { color: "#e5e7eb" },
+              grid: { color: "rgba(31,41,55,0.5)" }
+            }
+          }
+        }
+      });
+
+      // Initial member chart data
+      updateMemberChart(defaultMember);
+    }
+
+    function updateMemberChart(memberName) {
+      const data = memberData[memberName];
+      if (!data) return;
+
+      memberChart.data.datasets[0].data = data.scores;
+      memberChart.data.datasets[1].data = data.percentiles;
+      memberChart.update();
+    }
+
+    // Kick everything off
+    loadData().catch(err => {
+      console.error("Error loading data:", err);
+      alert("Error loading data. Check the CSV URL in the code.");
+    });
+  </script>
+</body>
+</html>
