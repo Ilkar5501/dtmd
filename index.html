@@ -56,7 +56,7 @@
 
   <div class="card">
     <h2>Member View: Score + Percentile (Dual Axis)</h2>
-    <p>Select a member to see their 6 week progression.</p>
+    <p>Select a member to see their 7 week progression.</p>
     <div style="margin-bottom: 0.75rem;">
       <label for="memberSelect">Member:</label>
       <select id="memberSelect"></select>
@@ -79,7 +79,7 @@
     const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXmnfHSlfOQTZ8_h1Y3NE-IqfxB942GsWfb34sRmSaDV__tWi68cDen3sy1L0TOwJGU6pmb2B4S8ZD/pub?gid=1833833721&single=true&output=csv";
 
     // Weeks you care about – must match your schema columns
-    const WEEKS = ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"];
+    const WEEKS = ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6", "Week 7"];
 
     // Global data structures
     let members = [];    // array of member names
@@ -151,6 +151,7 @@
     }
 
     // ------- Data loading -------
+
     async function loadData() {
       const res = await fetch(CSV_URL);
       if (!res.ok) {
@@ -186,6 +187,7 @@
     }
 
     // ------- UI setup -------
+
     function populateMemberSelect() {
       const select = document.getElementById("memberSelect");
       select.innerHTML = "";
@@ -201,6 +203,7 @@
     }
 
     // ------- Chart initialization -------
+
     function initCharts() {
       const ctxMember = document.getElementById("memberChart").getContext("2d");
       const ctxAll = document.getElementById("allPercentilesChart").getContext("2d");
@@ -225,6 +228,7 @@
               backgroundColor: "rgba(251,191,36,0.15)",
               tension: 0.2,
               pointRadius: 4
+              // If you ever want to connect across missing weeks, add: spanGaps: true
             },
             {
               label: "Percentile",
@@ -236,6 +240,7 @@
               borderDash: [6, 4],
               tension: 0.2,
               pointRadius: 4
+              // spanGaps: true  // same note as above
             }
           ]
         },
@@ -307,6 +312,7 @@
           backgroundColor: "rgba(148,163,184,0.15)",
           pointRadius: 0,
           tension: 0.15
+          // spanGaps: true    // enable if you want continuous lines across missing weeks
         };
       });
 
