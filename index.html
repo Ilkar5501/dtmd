@@ -56,7 +56,7 @@
 
   <div class="card">
     <h2>Member View: Score + Percentile (Dual Axis)</h2>
-    <p>Select a member to see their 7 week progression.</p>
+    <p>Select a member to see their 9 week progression.</p>
     <div style="margin-bottom: 0.75rem;">
       <label for="memberSelect">Member:</label>
       <select id="memberSelect"></select>
@@ -79,7 +79,7 @@
     const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXmnfHSlfOQTZ8_h1Y3NE-IqfxB942GsWfb34sRmSaDV__tWi68cDen3sy1L0TOwJGU6pmb2B4S8ZD/pub?gid=1833833721&single=true&output=csv";
 
     // Weeks you care about – must match your schema columns
-    const WEEKS = ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6", "Week 7"];
+    const WEEKS = ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6", "Week 7", "Week 8", "Week 9"];
 
     // Global data structures
     let members = [];    // array of member names
@@ -159,6 +159,10 @@
       }
       const text = await res.text();
       const { rows } = parseCsv(text);
+
+      // reset in case of re-load
+      members = [];
+      memberData = {};
 
       rows.forEach(row => {
         const memberName = row["Member"];
