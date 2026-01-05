@@ -18,9 +18,7 @@
       background: #0f172a;
       color: #e5e7eb;
     }
-    h1, h2 {
-      margin-top: 0;
-    }
+    h1, h2 { margin-top: 0; }
     .card {
       background: #020617;
       border-radius: 0.75rem;
@@ -29,10 +27,7 @@
       box-shadow: 0 10px 25px rgba(15, 23, 42, 0.8);
       border: 1px solid #1f2937;
     }
-    label {
-      font-size: 0.9rem;
-      margin-right: 0.5rem;
-    }
+    label { font-size: 0.9rem; margin-right: 0.5rem; }
     select {
       padding: 0.3rem 0.5rem;
       border-radius: 0.5rem;
@@ -40,10 +35,7 @@
       background: #020617;
       color: #e5e7eb;
     }
-    canvas {
-      max-width: 100%;
-      height: 400px;
-    }
+    canvas { max-width: 100%; height: 400px; }
     .legend-note {
       font-size: 0.8rem;
       color: #9ca3af;
@@ -56,7 +48,7 @@
 
   <div class="card">
     <h2>Member View: Score + Percentile (Dual Axis)</h2>
-    <p>Select a member to see their 9 week progression.</p>
+    <p>Select a member to see their 11 week progression.</p>
     <div style="margin-bottom: 0.75rem;">
       <label for="memberSelect">Member:</label>
       <select id="memberSelect"></select>
@@ -79,7 +71,10 @@
     const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXmnfHSlfOQTZ8_h1Y3NE-IqfxB942GsWfb34sRmSaDV__tWi68cDen3sy1L0TOwJGU6pmb2B4S8ZD/pub?gid=1833833721&single=true&output=csv";
 
     // Weeks you care about – must match your schema columns
-    const WEEKS = ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6", "Week 7", "Week 8", "Week 9"];
+    const WEEKS = [
+      "Week 1","Week 2","Week 3","Week 4","Week 5","Week 6",
+      "Week 7","Week 8","Week 9","Week 10","Week 11"
+    ];
 
     // Global data structures
     let members = [];    // array of member names
@@ -89,7 +84,6 @@
     let allPercentilesChart = null;
 
     // ------- CSV parsing helpers (handles quoted commas) -------
-
     function parseCsvLine(line) {
       const result = [];
       let current = "";
@@ -99,11 +93,9 @@
         const ch = line[i];
 
         if (ch === '"') {
-          // toggle in/out of quotes, or handle escaped quotes
           if (inQuotes && line[i + 1] === '"') {
-            // escaped quote ("")
             current += '"';
-            i++; // skip next quote
+            i++;
           } else {
             inQuotes = !inQuotes;
           }
@@ -144,23 +136,19 @@
       if (value === undefined || value === null || value === "" || value === "#N/A") {
         return null;
       }
-      // Remove commas from numbers like "1,234,567"
       const clean = value.replace(/,/g, "");
       const n = Number(clean);
       return isNaN(n) ? null : n;
     }
 
     // ------- Data loading -------
-
     async function loadData() {
       const res = await fetch(CSV_URL);
-      if (!res.ok) {
-        throw new Error("Network response was not ok");
-      }
+      if (!res.ok) throw new Error("Network response was not ok");
+
       const text = await res.text();
       const { rows } = parseCsv(text);
 
-      // reset in case of re-load
       members = [];
       memberData = {};
 
@@ -174,7 +162,6 @@
         WEEKS.forEach(week => {
           const scoreCol = `${week} Score`;
           const percCol = `${week} Percentile`;
-
           scores.push(toNumber(row[scoreCol]));
           percentiles.push(toNumber(row[percCol]));
         });
@@ -183,7 +170,6 @@
         memberData[memberName] = { scores, percentiles };
       });
 
-      // Sort members alphabetically for the dropdown
       members.sort((a, b) => a.localeCompare(b));
 
       populateMemberSelect();
@@ -191,33 +177,31 @@
     }
 
     // ------- UI setup -------
-
     function populateMemberSelect() {
       const select = document.getElementById("memberSelect");
       select.innerHTML = "";
+
       members.forEach(name => {
         const opt = document.createElement("option");
         opt.value = name;
         opt.textContent = name;
         select.appendChild(opt);
       });
+
       select.addEventListener("change", () => {
         updateMemberChart(select.value);
       });
     }
 
     // ------- Chart initialization -------
-
     function initCharts() {
       const ctxMember = document.getElementById("memberChart").getContext("2d");
       const ctxAll = document.getElementById("allPercentilesChart").getContext("2d");
 
       const defaultMember = members[0];
 
-      // register datalabels plugin
       Chart.register(ChartDataLabels);
 
-      // Member dual-axis chart (Score + Percentile)
       memberChart = new Chart(ctxMember, {
         type: "line",
         data: {
@@ -232,7 +216,6 @@
               backgroundColor: "rgba(251,191,36,0.15)",
               tension: 0.2,
               pointRadius: 4
-              // If you ever want to connect across missing weeks, add: spanGaps: true
             },
             {
               label: "Percentile",
@@ -244,7 +227,6 @@
               borderDash: [6, 4],
               tension: 0.2,
               pointRadius: 4
-              // spanGaps: true  // same note as above
             }
           ]
         },
@@ -258,12 +240,8 @@
                 label: ctx => {
                   const label = ctx.dataset.label || "";
                   const v = ctx.parsed.y;
-                  if (label === "Score" && v != null) {
-                    return `${label}: ${v.toLocaleString()}`;
-                  }
-                  if (label === "Percentile" && v != null) {
-                    return `${label}: ${v}`;
-                  }
+                  if (label === "Score" && v != null) return `${label}: ${v.toLocaleString()}`;
+                  if (label === "Percentile" && v != null) return `${label}: ${v}`;
                   return `${label}: ${v}`;
                 }
               }
@@ -275,11 +253,7 @@
               font: { size: 10 },
               formatter: (value, ctx) => {
                 if (value == null) return "";
-                if (ctx.dataset.label === "Score") {
-                  return value.toLocaleString();
-                } else {
-                  return `${value}`;
-                }
+                return (ctx.dataset.label === "Score") ? value.toLocaleString() : `${value}`;
               }
             }
           },
@@ -291,7 +265,7 @@
             yScore: {
               type: "linear",
               position: "left",
-              ticks: { color: "#fbbf24" }, // score axis
+              ticks: { color: "#fbbf24" },
               grid: { color: "rgba(31,41,55,0.5)" }
             },
             yPercentile: {
@@ -299,26 +273,22 @@
               position: "right",
               min: 0,
               max: 100,
-              ticks: { color: "#22d3ee" }, // percentile axis
+              ticks: { color: "#22d3ee" },
               grid: { drawOnChartArea: false }
             }
           }
         }
       });
 
-      // Holistic chart: all members' percentile lines
-      const percentileDatasets = members.map(name => {
-        return {
-          label: name,
-          data: memberData[name].percentiles,
-          borderWidth: 1,
-          borderColor: "rgba(148,163,184,0.6)",
-          backgroundColor: "rgba(148,163,184,0.15)",
-          pointRadius: 0,
-          tension: 0.15
-          // spanGaps: true    // enable if you want continuous lines across missing weeks
-        };
-      });
+      const percentileDatasets = members.map(name => ({
+        label: name,
+        data: memberData[name].percentiles,
+        borderWidth: 1,
+        borderColor: "rgba(148,163,184,0.6)",
+        backgroundColor: "rgba(148,163,184,0.15)",
+        pointRadius: 0,
+        tension: 0.15
+      }));
 
       allPercentilesChart = new Chart(ctxAll, {
         type: "line",
@@ -330,14 +300,10 @@
           responsive: true,
           interaction: { mode: "nearest", intersect: false },
           plugins: {
-            legend: { display: false }, // 100+ names is too much
+            legend: { display: false },
             tooltip: {
               callbacks: {
-                label: ctx => {
-                  const name = ctx.dataset.label || "";
-                  const v = ctx.parsed.y;
-                  return `${name}: ${v}`;
-                }
+                label: ctx => `${ctx.dataset.label || ""}: ${ctx.parsed.y}`
               }
             },
             datalabels: { display: false }
@@ -357,7 +323,6 @@
         }
       });
 
-      // Initial member chart data
       updateMemberChart(defaultMember);
     }
 
@@ -370,7 +335,6 @@
       memberChart.update();
     }
 
-    // Kick everything off
     loadData().catch(err => {
       console.error("Error loading data:", err);
       alert("Error loading data. Check the CSV URL in the code.");
